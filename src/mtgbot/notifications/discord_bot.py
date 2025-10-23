@@ -306,15 +306,12 @@ class MtgDiscordBot(discord.Client):
 
         tree.add_command(sets_group, guild=self._guild)
 
-        @tree.command(
-            name="tcg_sales", description="Show recent TCGplayer sales history"
-        )
         @app_commands.describe(
             product_id="TCGplayer product ID (numeric)",
             days="Number of days to include (default 90)",
             max_listings="Maximum sales records to fetch (default 100)",
         )
-        async def tcg_sales(  # type: ignore[unused-ignore]
+        async def tcg_sales(
             interaction: discord.Interaction,
             product_id: int,
             days: Optional[int] = None,
@@ -393,6 +390,13 @@ class MtgDiscordBot(discord.Client):
             )
 
             await interaction.followup.send(embed=embed, file=file)
+
+        tcg_sales_command = app_commands.Command(
+            name="tcg_sales",
+            description="Show recent TCGplayer sales history",
+            callback=tcg_sales,
+        )
+        tree.add_command(tcg_sales_command, guild=self._guild)
 
         @app_commands.guild_only()
         async def _alert_test_callback(interaction: discord.Interaction) -> None:
