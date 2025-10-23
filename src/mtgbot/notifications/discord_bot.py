@@ -384,12 +384,16 @@ class MtgDiscordBot(discord.Client):
             product_id="TCGplayer product ID",
             limit="Number of listings to return (default 5)",
             offset="Offset for pagination (default 0)",
+            shipping_country="Shipping country code (default US)",
+            wpn_only="Include only Wizards Play Network sellers",
         )
         async def tcg_listings(
             interaction: discord.Interaction,
             product_id: int,
             limit: Optional[int] = None,
             offset: Optional[int] = None,
+            shipping_country: Optional[str] = None,
+            wpn_only: Optional[bool] = None,
         ) -> None:
             service = self.tcgplayer_listings_service
             if not service:
@@ -404,6 +408,8 @@ class MtgDiscordBot(discord.Client):
                 product_id,
                 limit=max(1, min(limit or 5, 20)),
                 offset=max(0, offset or 0),
+                country_code=shipping_country or "US",
+                seller_programs=["WizardsPlayNetwork"] if wpn_only else None,
             )
 
             if not listings:
@@ -444,6 +450,8 @@ class MtgDiscordBot(discord.Client):
             country_code="Shipping country code (default US)",
             product_id="TCGplayer product ID to auto-fill listing details",
             listing_index="Listing number (1-based) when using product_id (default 1)",
+            shipping_country="Shipping country code when auto-filling (default US)",
+            wpn_only="Limit auto-fill to Wizards Play Network sellers",
         )
         async def tcg_cart_add(  # type: ignore[unused-ignore]
             interaction: discord.Interaction,
@@ -456,6 +464,8 @@ class MtgDiscordBot(discord.Client):
             country_code: Optional[str] = "US",
             product_id: Optional[int] = None,
             listing_index: Optional[int] = None,
+            shipping_country: Optional[str] = None,
+            wpn_only: Optional[bool] = None,
         ) -> None:
             if not self.tcgplayer_cart_service:
                 await interaction.response.send_message(
@@ -476,6 +486,8 @@ class MtgDiscordBot(discord.Client):
                     product_id,
                     limit=max(1, min((listing_index or 5), 20)),
                     offset=0,
+                    country_code=shipping_country or country_code or "US",
+                    seller_programs=["WizardsPlayNetwork"] if wpn_only else None,
                 )
                 if not listings:
                     await interaction.followup.send(
@@ -516,7 +528,7 @@ class MtgDiscordBot(discord.Client):
                 channel_id=channel_id
                 if channel_id is not None
                 else (listing.channel_id if listing else 0),
-                country_code=country_code or "US",
+                country_code=country_code or shipping_country or "US",
             )
 
             if not result.added:

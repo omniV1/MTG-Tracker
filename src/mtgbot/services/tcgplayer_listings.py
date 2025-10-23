@@ -43,25 +43,15 @@ class TcgplayerListingsService:
         *,
         limit: int = 20,
         offset: int = 0,
-        include_direct: bool = True,
-        include_marketplace: bool = True,
+        country_code: str = "US",
+        channel_id: int = 0,
+        seller_programs: Optional[List[str]] = None,
     ) -> List[ListingInfo]:
         session = self._session
         if session is None:
             raise RuntimeError("HTTP session not available")
 
-        params = {
-            "mpfev": self.DEFAULT_MPFEV,
-            "offset": max(0, offset),
-            "limit": max(1, min(limit, 100)),
-            "shippingCountry": "US",
-        }
-        if not include_direct:
-            params["includeDirect"] = "false"
-        if not include_marketplace:
-            params["includeMarketplace"] = "false"
-
-        url = f"{self.BASE_URL}/product/{product_id}/listings"
+        url = f"https://mp-search-api.tcgplayer.com/v1/product/{product_id}/listings"
         headers = {
             "Origin": "https://www.tcgplayer.com",
             "Referer": "https://www.tcgplayer.com/",
@@ -76,8 +66,27 @@ class TcgplayerListingsService:
         if cookie:
             headers["Cookie"] = cookie
 
+        payload = {
+            "filters": {
+                "term": {
+                    "sellerStatus": "Live",
+                    "channelId": channel_id,
+                    "language": ["English"],
+                },
+                "range": {"quantity": {"gte": 1}},
+                "exclude": {"channelExclusion": 0},
+            },
+            "from": max(0, offset),
+            "size": max(1, min(limit, 50)),
+            "sort": {"field": "price+shipping", "order": "asc"},
+            "context": {"shippingCountry": country_code or "US", "cart": {}},
+            "aggregations": ["listingType"],
+        }
+        if seller_programs:
+            payload["filters"]["term"]["sellerPrograms"] = seller_programs
+
         try:
-            async with session.get(url, params=params, headers=headers) as resp:
+            async with session.post(url, json=payload, headers=headers) as resp:
                 if resp.status == 403:
                     log.warning(
                         "Listings fetch forbidden for product %s; cookie may be missing or expired.",
