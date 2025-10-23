@@ -76,6 +76,13 @@ Tags tie into Discord role mentions so Phoenix pickup groups can be pinged witho
 - Supply `TCGPLAYER_PUBLIC_KEY` and `TCGPLAYER_PRIVATE_KEY` in `.env` for authenticated requests; without keys the bot falls back to the public marketplace endpoint.  
 - Example: `/tcg_sales 544234 60` shows 60 days of Extended Art Final Showdown sales.
 
+## TCGplayer Cart Automation (experimental)
+- `/tcgplayer connect cookie:<string>` securely stores your TCGplayer cookie (must include `StoreCart_PRODUCTION=CK=`). Paste it from the browser’s cart page.
+- `/tcgplayer status` confirms whether credentials are stored; `/tcgplayer disconnect` removes them.
+- `/tcgplayer cart_add sku:<id> seller_key:<key> price:<amt> [quantity] [is_direct] [channel_id] [country_code]` replays the browser request to add an item to your cart.
+- The bot requires your cookie and mimics browser headers. Cookies expire; re-run `/tcgplayer connect` whenever you refresh the browser session.
+- Always obtain TCGplayer’s approval before enabling auto-cart in production.
+
 ## Roadmap
 1. **Phoenix Retailer Feeds** – wire store newsletters or Discord feeds to the JSON format expected by `PhoenixLocalStoreWatcher`.
 2. **SKU Normalization** – connect Scryfall/MTGJSON lookups to replace slug identifiers with canonical oracle IDs.

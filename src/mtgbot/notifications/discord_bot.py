@@ -28,6 +28,10 @@ from mtgbot.services.tcgplayer_sales import (
     TcgSalesError,
     TcgplayerSalesService,
 )
+from mtgbot.services.tcgplayer_cart import (
+    CartResult,
+    TcgplayerCartService,
+)
 
 log = logging.getLogger(__name__)
 _TEST_MILESTONE = SetMilestone.ANNOUNCEMENT
@@ -40,6 +44,7 @@ class MtgDiscordBot(discord.Client):
         wishlist_service: WishlistService,
         set_schedule_service: Optional[SetScheduleService] = None,
         tcgplayer_sales_service: Optional[TcgplayerSalesService] = None,
+        tcgplayer_cart_service: Optional[TcgplayerCartService] = None,
     ) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
@@ -49,6 +54,7 @@ class MtgDiscordBot(discord.Client):
         self.wishlist_service = wishlist_service
         self.set_schedule_service = set_schedule_service
         self.tcgplayer_sales_service = tcgplayer_sales_service
+        self.tcgplayer_cart_service = tcgplayer_cart_service
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self) -> None:
@@ -305,6 +311,122 @@ class MtgDiscordBot(discord.Client):
                 )
 
         tree.add_command(sets_group, guild=self._guild)
+
+        tcg_group = app_commands.Group(
+            name="tcgplayer",
+            description="Manage TCGplayer cart automation",
+        )
+
+        @tcg_group.command(name="connect", description="Store your TCGplayer cookie for cart automation")
+        @app_commands.describe(cookie="Paste the cookie string from the cart page (StoreCart_PRODUCTION included)")
+        async def tcg_connect(interaction: discord.Interaction, cookie: str) -> None:
+            if not self.tcgplayer_cart_service:
+                await interaction.response.send_message(
+                    "TCGplayer cart service is not configured.", ephemeral=True
+                )
+                return
+            await interaction.response.defer(ephemeral=True)
+            cleaned = cookie.strip()
+            try:
+                cart_key = await self.tcgplayer_cart_service.connect(
+                    interaction.user.id, cleaned
+                )
+            except ValueError as exc:
+                await interaction.followup.send(str(exc), ephemeral=True)
+                return
+            await interaction.followup.send(
+                f"Stored credentials. Cart key: `{cart_key}`.",
+                ephemeral=True,
+            )
+
+        @tcg_group.command(name="disconnect", description="Remove stored cart credentials")
+        async def tcg_disconnect(interaction: discord.Interaction) -> None:
+            if not self.tcgplayer_cart_service:
+                await interaction.response.send_message(
+                    "TCGplayer cart service is not configured.", ephemeral=True
+                )
+                return
+            removed = await self.tcgplayer_cart_service.disconnect(interaction.user.id)
+            if removed:
+                await interaction.response.send_message(
+                    "Removed stored TCGplayer credentials.", ephemeral=True
+                )
+            else:
+                await interaction.response.send_message(
+                    "No credentials were stored.", ephemeral=True
+                )
+
+        @tcg_group.command(name="status", description="Check if cart automation is connected")
+        async def tcg_status(interaction: discord.Interaction) -> None:
+            if not self.tcgplayer_cart_service:
+                await interaction.response.send_message(
+                    "TCGplayer cart service is not configured.", ephemeral=True
+                )
+                return
+            connected = await self.tcgplayer_cart_service.has_credentials(
+                interaction.user.id
+            )
+            msg = (
+                "Credentials stored."
+                if connected
+                else "No credentials stored. Use /tcgplayer connect first."
+            )
+            await interaction.response.send_message(msg, ephemeral=True)
+
+        @tcg_group.command(name="cart_add", description="Add an item to your TCGplayer cart")
+        @app_commands.describe(
+            sku="TCGplayer SKU ID",
+            seller_key="Seller key from listing",
+            quantity="Quantity to add (default 1)",
+            price="Expected price per item (used for validation)",
+            is_direct="Set true when adding a Direct listing",
+            channel_id="Channel ID (default 0)",
+            country_code="Shipping country code (default US)",
+        )
+        async def tcg_cart_add(  # type: ignore[unused-ignore]
+            interaction: discord.Interaction,
+            sku: int,
+            seller_key: str,
+            price: float,
+            quantity: Optional[int] = 1,
+            is_direct: Optional[bool] = False,
+            channel_id: Optional[int] = 0,
+            country_code: Optional[str] = "US",
+        ) -> None:
+            if not self.tcgplayer_cart_service:
+                await interaction.response.send_message(
+                    "TCGplayer cart service is not configured.", ephemeral=True
+                )
+                return
+
+            await interaction.response.defer(ephemeral=True)
+            result = await self.tcgplayer_cart_service.add_item(
+                interaction.user.id,
+                sku=sku,
+                seller_key=seller_key,
+                quantity=max(1, quantity or 1),
+                price=price,
+                is_direct=bool(is_direct),
+                channel_id=channel_id or 0,
+                country_code=country_code or "US",
+            )
+
+            if not result.added:
+                await interaction.followup.send(result.message, ephemeral=True)
+                return
+
+            subtotal_text = (
+                f"Cart subtotal: ${result.subtotal:.2f}" if result.subtotal else ""
+            )
+            embed = discord.Embed(
+                title="TCGplayer Cart Updated",
+                description=result.message,
+            )
+            if subtotal_text:
+                embed.add_field(name="Subtotal", value=subtotal_text, inline=False)
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+        tree.add_command(tcg_group, guild=self._guild)
 
         @app_commands.describe(
             product_id="TCGplayer product ID (numeric)",

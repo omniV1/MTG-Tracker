@@ -14,9 +14,11 @@ from mtgbot.config import load_settings
 from mtgbot.models import Decision, InventoryEvent, WishlistEntry
 from mtgbot.notifications.discord_bot import MtgDiscordBot, start_bot
 from mtgbot.services.set_schedule import SetScheduleService
+from mtgbot.services.tcgplayer_cart import TcgplayerCartService
 from mtgbot.services.tcgplayer_sales import TcgplayerSalesService
 from mtgbot.services.wishlist import WishlistService
 from mtgbot.storage.sets import SetRepository
+from mtgbot.storage.tcgplayer_cart import TcgplayerCartRepository
 from mtgbot.storage.tcgplayer_sales import TcgplayerSalesRepository
 from mtgbot.storage.wishlist import RoleMappingRepository, WishlistRepository
 from mtgbot.watchers.base import Watcher
@@ -141,6 +143,10 @@ async def app() -> None:
     await tcg_sales_repo.init()
     tcg_sales_service = TcgplayerSalesService(tcg_sales_repo, settings.vendors)
 
+    tcg_cart_repo = TcgplayerCartRepository(settings.database.sqlite_path)
+    await tcg_cart_repo.init()
+    tcg_cart_service = TcgplayerCartService(tcg_cart_repo)
+
     timeout = aiohttp.ClientTimeout(total=30)
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -173,12 +179,14 @@ async def app() -> None:
         scryfall_watcher = ScryfallSetWatcher(session)
 
         tcg_sales_service.set_session(session)
+        tcg_cart_service.set_session(session)
 
         discord_client = MtgDiscordBot(
             settings,
             wishlist_service,
             set_schedule_service,
             tcg_sales_service,
+            tcg_cart_service,
         )
         discord_client.register_commands()
 
