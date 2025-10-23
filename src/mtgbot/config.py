@@ -53,6 +53,7 @@ class VendorSettings:
     tcgplayer_public_key: Optional[str]
     tcgplayer_private_key: Optional[str]
     tcgplayer_skus: List[str]
+    tcgplayer_cookie: Optional[str]
 
 
 @dataclass
@@ -105,6 +106,7 @@ def load_settings() -> Settings:
         tcgplayer_public_key=_getenv("TCGPLAYER_PUBLIC_KEY"),
         tcgplayer_private_key=_getenv("TCGPLAYER_PRIVATE_KEY"),
         tcgplayer_skus=_split_list(_getenv("TCGPLAYER_SKUS", "")),
+        tcgplayer_cookie=_getenv("TCGPLAYER_COOKIE"),
     )
 
     schedule = ScheduleSettings(

@@ -162,6 +162,8 @@ class TcgplayerSalesService:
         aggregated: List[dict[str, object]] = []
         token = await self._ensure_token(session)
         headers = {"Content-Type": "application/json"}
+        if self._settings.tcgplayer_cookie:
+            headers["Cookie"] = self._settings.tcgplayer_cookie
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
@@ -181,8 +183,8 @@ class TcgplayerSalesService:
                         token = await self._refresh_token(session)
                         if token:
                             headers["Authorization"] = f"Bearer {token}"
-                        else:
-                            headers.pop("Authorization", None)
+                        elif "Authorization" in headers:
+                            headers.pop("Authorization")
                         continue
                     resp.raise_for_status()
                     data = await resp.json()
