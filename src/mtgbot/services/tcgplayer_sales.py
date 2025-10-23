@@ -161,7 +161,16 @@ class TcgplayerSalesService:
         offset = 0
         aggregated: List[dict[str, object]] = []
         token = await self._ensure_token(session)
-        headers = {"Content-Type": "application/json"}
+        headers = {
+            "Content-Type": "application/json",
+            "Origin": "https://www.tcgplayer.com",
+            "Referer": "https://www.tcgplayer.com/",
+            "User-Agent": (
+                "Mozilla/5.0 (X11; Linux x86_64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/141.0.0.0 Safari/537.36"
+            ),
+        }
         if self._settings.tcgplayer_cookie:
             headers["Cookie"] = self._settings.tcgplayer_cookie
         if token:
@@ -189,6 +198,11 @@ class TcgplayerSalesService:
                     resp.raise_for_status()
                     data = await resp.json()
             except aiohttp.ClientResponseError as exc:
+                if exc.status == 403:
+                    raise TcgSalesError(
+                        "TCGplayer request rejected (403). Ensure you have a valid "
+                        "TCGPLAYER_COOKIE in .env and it has not expired."
+                    ) from exc
                 raise TcgSalesError(
                     f"TCGplayer request failed with status {exc.status}"
                 ) from exc
