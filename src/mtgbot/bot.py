@@ -147,7 +147,7 @@ async def app() -> None:
     tcg_cart_repo = TcgplayerCartRepository(settings.database.sqlite_path)
     await tcg_cart_repo.init()
     tcg_cart_service = TcgplayerCartService(tcg_cart_repo)
-    tcg_listing_service = TcgplayerListingsService()
+    tcg_listing_service = TcgplayerListingsService(settings.vendors)
 
     timeout = aiohttp.ClientTimeout(total=30)
 

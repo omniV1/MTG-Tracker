@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from typing import List, Optional
 
 import aiohttp
+
+from mtgbot.config import VendorSettings
 
 
 log = logging.getLogger(__name__)
@@ -28,7 +30,8 @@ class TcgplayerListingsService:
     BASE_URL = "https://mpapi.tcgplayer.com/v2"
     DEFAULT_MPFEV = "4426"
 
-    def __init__(self) -> None:
+    def __init__(self, settings: VendorSettings) -> None:
+        self._settings = settings
         self._session: Optional[aiohttp.ClientSession] = None
 
     def set_session(self, session: aiohttp.ClientSession) -> None:
@@ -51,6 +54,7 @@ class TcgplayerListingsService:
             "mpfev": self.DEFAULT_MPFEV,
             "offset": max(0, offset),
             "limit": max(1, min(limit, 100)),
+            "shippingCountry": "US",
         }
         if not include_direct:
             params["includeDirect"] = "false"
@@ -68,9 +72,18 @@ class TcgplayerListingsService:
             ),
             "Accept": "application/json, text/plain, */*",
         }
+        cookie = self._settings.tcgplayer_cookie
+        if cookie:
+            headers["Cookie"] = cookie
 
         try:
             async with session.get(url, params=params, headers=headers) as resp:
+                if resp.status == 403:
+                    log.warning(
+                        "Listings fetch forbidden for product %s; cookie may be missing or expired.",
+                        product_id,
+                    )
+                    return []
                 if resp.status != 200:
                     text = await resp.text()
                     log.warning(
