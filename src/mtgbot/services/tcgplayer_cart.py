@@ -111,12 +111,35 @@ class TcgplayerCartService:
                 async with session.post(url, headers=headers, json=payload) as resp:
                     text = await resp.text()
                     if resp.status != 200:
+                        message = f"TCGplayer returned HTTP {resp.status}"
+                        extra_summary = None
+                        try:
+                            data = json.loads(text)
+                            errors = data.get("errors") if isinstance(data, dict) else None
+                            if errors:
+                                message = ", ".join(
+                                    f"{err.get('code', 'error')}: {err.get('message', '')}".strip()
+                                    for err in errors
+                                )
+                            results = data.get("results") if isinstance(data, dict) else None
+                            if results:
+                                extra_summary = results
+                                first = results[0] if isinstance(results, list) else None
+                                if isinstance(first, dict):
+                                    seller_qty = first.get("sellerQuantityAvailable")
+                                    cart_qty = first.get("itemQuantityInCart")
+                                    if seller_qty is not None and cart_qty is not None:
+                                        message += (
+                                            f" (Seller has {seller_qty}; you already have {cart_qty} in cart)"
+                                        )
+                        except json.JSONDecodeError:
+                            pass
                         log.warning("Add to cart failed (%s): %s", resp.status, text)
                         return CartResult(
                             added=False,
                             subtotal=None,
-                            message=f"TCGplayer returned HTTP {resp.status}",
-                            summary=None,
+                            message=message,
+                            summary=extra_summary,
                         )
                     try:
                         data = json.loads(text)
