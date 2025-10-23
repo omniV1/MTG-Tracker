@@ -15,6 +15,7 @@ from mtgbot.models import Decision, InventoryEvent, WishlistEntry
 from mtgbot.notifications.discord_bot import MtgDiscordBot, start_bot
 from mtgbot.services.set_schedule import SetScheduleService
 from mtgbot.services.tcgplayer_cart import TcgplayerCartService
+from mtgbot.services.tcgplayer_listings import TcgplayerListingsService
 from mtgbot.services.tcgplayer_sales import TcgplayerSalesService
 from mtgbot.services.wishlist import WishlistService
 from mtgbot.storage.sets import SetRepository
@@ -146,6 +147,7 @@ async def app() -> None:
     tcg_cart_repo = TcgplayerCartRepository(settings.database.sqlite_path)
     await tcg_cart_repo.init()
     tcg_cart_service = TcgplayerCartService(tcg_cart_repo)
+    tcg_listing_service = TcgplayerListingsService()
 
     timeout = aiohttp.ClientTimeout(total=30)
 
@@ -180,6 +182,7 @@ async def app() -> None:
 
         tcg_sales_service.set_session(session)
         tcg_cart_service.set_session(session)
+        tcg_listing_service.set_session(session)
 
         discord_client = MtgDiscordBot(
             settings,
@@ -187,6 +190,7 @@ async def app() -> None:
             set_schedule_service,
             tcg_sales_service,
             tcg_cart_service,
+            tcg_listing_service,
         )
         discord_client.register_commands()
 
