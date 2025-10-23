@@ -71,6 +71,11 @@ Tags tie into Discord role mentions so Phoenix pickup groups can be pinged witho
 3. Restart the bot so `PhoenixLocalStoreWatcher` begins emitting Gamers Guild alerts. Use `--once` instead of `--serve` if you just want to dump the feed output.
    When a product surfaces, the bot adds a "Contact Store" button pointing at the store's site/Discord.
 
+## TCGplayer Sales Snapshots
+- `/tcg_sales product_id:<id> [days] [max_listings]` plots the latest TCGplayer sales for the given product ID and posts a chart with stats. Defaults: 90 days, 100 records.  
+- Supply `TCGPLAYER_PUBLIC_KEY` and `TCGPLAYER_PRIVATE_KEY` in `.env` for authenticated requests; without keys the bot falls back to the public marketplace endpoint.  
+- Example: `/tcg_sales 544234 60` shows 60 days of Extended Art Final Showdown sales.
+
 ## Roadmap
 1. **Phoenix Retailer Feeds** – wire store newsletters or Discord feeds to the JSON format expected by `PhoenixLocalStoreWatcher`.
 2. **SKU Normalization** – connect Scryfall/MTGJSON lookups to replace slug identifiers with canonical oracle IDs.

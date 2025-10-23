@@ -23,6 +23,11 @@ from mtgbot.models import (
 )
 from mtgbot.services.wishlist import WishlistService
 from mtgbot.services.set_schedule import SetScheduleService, UpcomingSet
+from mtgbot.services.tcgplayer_sales import (
+    SalesSummary,
+    TcgSalesError,
+    TcgplayerSalesService,
+)
 
 log = logging.getLogger(__name__)
 _TEST_MILESTONE = SetMilestone.ANNOUNCEMENT
@@ -34,6 +39,7 @@ class MtgDiscordBot(discord.Client):
         settings: Settings,
         wishlist_service: WishlistService,
         set_schedule_service: Optional[SetScheduleService] = None,
+        tcgplayer_sales_service: Optional[TcgplayerSalesService] = None,
     ) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
@@ -42,6 +48,7 @@ class MtgDiscordBot(discord.Client):
         self.settings = settings
         self.wishlist_service = wishlist_service
         self.set_schedule_service = set_schedule_service
+        self.tcgplayer_sales_service = tcgplayer_sales_service
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self) -> None:
@@ -298,6 +305,94 @@ class MtgDiscordBot(discord.Client):
                 )
 
         tree.add_command(sets_group, guild=self._guild)
+
+        @tree.command(
+            name="tcg_sales", description="Show recent TCGplayer sales history"
+        )
+        @app_commands.describe(
+            product_id="TCGplayer product ID (numeric)",
+            days="Number of days to include (default 90)",
+            max_listings="Maximum sales records to fetch (default 100)",
+        )
+        async def tcg_sales(  # type: ignore[unused-ignore]
+            interaction: discord.Interaction,
+            product_id: int,
+            days: Optional[int] = None,
+            max_listings: Optional[int] = None,
+        ) -> None:
+            if not self.tcgplayer_sales_service:
+                await interaction.response.send_message(
+                    "TCGplayer sales service is not configured.",
+                    ephemeral=True,
+                )
+                return
+
+            window = max(7, min(days or 90, 365))
+            limit = max(25, min(max_listings or 100, 200))
+
+            await interaction.response.defer(thinking=True)
+
+            try:
+                records = await self.tcgplayer_sales_service.fetch_and_store_sales(
+                    product_id,
+                    max_listings=limit,
+                    days=window,
+                )
+            except TcgSalesError as exc:
+                await interaction.followup.send(
+                    f"Failed to fetch sales data: {exc}", ephemeral=True
+                )
+                return
+
+            if not records:
+                await interaction.followup.send(
+                    f"No sales found in the last {window} days.",
+                    ephemeral=True,
+                )
+                return
+
+            try:
+                image, summary = await self.tcgplayer_sales_service.build_chart(
+                    records
+                )
+            except TcgSalesError as exc:
+                await interaction.followup.send(
+                    f"Unable to build chart: {exc}", ephemeral=True
+                )
+                return
+
+            avg_price = sum(r.price for r in records) / len(records)
+            total_quantity = sum(r.quantity for r in records)
+
+            direction = summary.gain
+            color = discord.Color.green() if direction >= 0 else discord.Color.red()
+            file_name = f"tcg_sales_{summary.tcg_id}.png"
+            file = discord.File(fp=image, filename=file_name)
+
+            embed = discord.Embed(
+                title=f"TCGplayer Sales — {summary.title}",
+                url=f"https://www.tcgplayer.com/product/{summary.tcg_id}",
+                color=color,
+            )
+            embed.add_field(
+                name="Latest Price",
+                value=f"${summary.latest_price:.2f}",
+            )
+            embed.add_field(
+                name="Change",
+                value=f"{'+' if direction >= 0 else ''}${direction:.2f}",
+            )
+            embed.add_field(
+                name="Average Price",
+                value=f"${avg_price:.2f}",
+            )
+            embed.add_field(name="Sales Records", value=str(summary.total_sales))
+            embed.add_field(name="Total Quantity", value=str(total_quantity))
+            embed.set_footer(
+                text=f"Window: {window}d • Oldest price ${summary.oldest_price:.2f}"
+            )
+
+            await interaction.followup.send(embed=embed, file=file)
 
         @app_commands.guild_only()
         async def _alert_test_callback(interaction: discord.Interaction) -> None:
