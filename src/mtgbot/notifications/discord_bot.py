@@ -32,6 +32,10 @@ from mtgbot.services.tcgplayer_cart import (
     CartResult,
     TcgplayerCartService,
 )
+from mtgbot.services.tcgplayer_listings import (
+    ListingInfo,
+    TcgplayerListingsService,
+)
 
 log = logging.getLogger(__name__)
 _TEST_MILESTONE = SetMilestone.ANNOUNCEMENT
@@ -45,6 +49,7 @@ class MtgDiscordBot(discord.Client):
         set_schedule_service: Optional[SetScheduleService] = None,
         tcgplayer_sales_service: Optional[TcgplayerSalesService] = None,
         tcgplayer_cart_service: Optional[TcgplayerCartService] = None,
+        tcgplayer_listings_service: Optional[TcgplayerListingsService] = None,
     ) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
@@ -55,6 +60,7 @@ class MtgDiscordBot(discord.Client):
         self.set_schedule_service = set_schedule_service
         self.tcgplayer_sales_service = tcgplayer_sales_service
         self.tcgplayer_cart_service = tcgplayer_cart_service
+        self.tcgplayer_listings_service = tcgplayer_listings_service
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self) -> None:
@@ -373,25 +379,83 @@ class MtgDiscordBot(discord.Client):
             )
             await interaction.response.send_message(msg, ephemeral=True)
 
+        @tcg_group.command(name="listings", description="List marketplace listings for a product")
+        @app_commands.describe(
+            product_id="TCGplayer product ID",
+            limit="Number of listings to return (default 5)",
+            offset="Offset for pagination (default 0)",
+        )
+        async def tcg_listings(
+            interaction: discord.Interaction,
+            product_id: int,
+            limit: Optional[int] = None,
+            offset: Optional[int] = None,
+        ) -> None:
+            service = self.tcgplayer_listings_service
+            if not service:
+                await interaction.response.send_message(
+                    "TCGplayer listings service is not configured.",
+                    ephemeral=True,
+                )
+                return
+
+            await interaction.response.defer(ephemeral=True)
+            listings = await service.fetch_listings(
+                product_id,
+                limit=max(1, min(limit or 5, 20)),
+                offset=max(0, offset or 0),
+            )
+
+            if not listings:
+                await interaction.followup.send(
+                    "No listings returned for that product.",
+                    ephemeral=True,
+                )
+                return
+
+            embed = discord.Embed(
+                title=f"TCGplayer Listings — Product {product_id}",
+                description="Use `/tcgplayer cart_add` with the seller key to automate adds.",
+            )
+
+            for index, listing in enumerate(listings, start=1):
+                seller = listing.seller_name or listing.seller_key
+                direct_flag = "Direct" if listing.is_direct else "Marketplace"
+                embed.add_field(
+                    name=f"#{index} — {seller}",
+                    value=(
+                        f"`sku` {listing.sku} • `sellerKey` {listing.seller_key}\n"
+                        f"Price: ${listing.price:.2f} • Qty: {listing.quantity}\n"
+                        f"{direct_flag} • Channel {listing.channel_id}"
+                    ),
+                    inline=False,
+                )
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
         @tcg_group.command(name="cart_add", description="Add an item to your TCGplayer cart")
         @app_commands.describe(
-            sku="TCGplayer SKU ID",
-            seller_key="Seller key from listing",
+            sku="TCGplayer SKU ID (optional with product_id)",
+            seller_key="Seller key (optional with product_id)",
+            price="Expected price (optional with product_id)",
             quantity="Quantity to add (default 1)",
-            price="Expected price per item (used for validation)",
             is_direct="Set true when adding a Direct listing",
             channel_id="Channel ID (default 0)",
             country_code="Shipping country code (default US)",
+            product_id="TCGplayer product ID to auto-fill listing details",
+            listing_index="Listing number (1-based) when using product_id (default 1)",
         )
         async def tcg_cart_add(  # type: ignore[unused-ignore]
             interaction: discord.Interaction,
-            sku: int,
-            seller_key: str,
-            price: float,
+            sku: Optional[int] = None,
+            seller_key: Optional[str] = None,
+            price: Optional[float] = None,
             quantity: Optional[int] = 1,
-            is_direct: Optional[bool] = False,
-            channel_id: Optional[int] = 0,
+            is_direct: Optional[bool] = None,
+            channel_id: Optional[int] = None,
             country_code: Optional[str] = "US",
+            product_id: Optional[int] = None,
+            listing_index: Optional[int] = None,
         ) -> None:
             if not self.tcgplayer_cart_service:
                 await interaction.response.send_message(
@@ -400,14 +464,58 @@ class MtgDiscordBot(discord.Client):
                 return
 
             await interaction.response.defer(ephemeral=True)
+            listing: Optional[ListingInfo] = None
+            if product_id is not None:
+                if not self.tcgplayer_listings_service:
+                    await interaction.followup.send(
+                        "Listings service unavailable; supply SKU and seller key manually.",
+                        ephemeral=True,
+                    )
+                    return
+                listings = await self.tcgplayer_listings_service.fetch_listings(
+                    product_id,
+                    limit=max(1, min((listing_index or 5), 20)),
+                    offset=0,
+                )
+                if not listings:
+                    await interaction.followup.send(
+                        "No listings returned for that product.", ephemeral=True
+                    )
+                    return
+                idx = max(1, listing_index or 1) - 1
+                if idx >= len(listings):
+                    idx = len(listings) - 1
+                listing = listings[idx]
+                if sku is None:
+                    sku = listing.sku
+                if seller_key is None:
+                    seller_key = listing.seller_key
+                if price is None:
+                    price = listing.price
+                if is_direct is None:
+                    is_direct = listing.is_direct
+                if channel_id is None:
+                    channel_id = listing.channel_id
+
+            if sku is None or seller_key is None or price is None:
+                await interaction.followup.send(
+                    "Provide `sku`, `seller_key`, and `price`, or include `product_id` to auto-fill.",
+                    ephemeral=True,
+                )
+                return
+
             result = await self.tcgplayer_cart_service.add_item(
                 interaction.user.id,
                 sku=sku,
                 seller_key=seller_key,
                 quantity=max(1, quantity or 1),
                 price=price,
-                is_direct=bool(is_direct),
-                channel_id=channel_id or 0,
+                is_direct=bool(is_direct)
+                if is_direct is not None
+                else bool(listing.is_direct if listing else False),
+                channel_id=channel_id
+                if channel_id is not None
+                else (listing.channel_id if listing else 0),
                 country_code=country_code or "US",
             )
 

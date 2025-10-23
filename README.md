@@ -79,7 +79,8 @@ Tags tie into Discord role mentions so Phoenix pickup groups can be pinged witho
 ## TCGplayer Cart Automation (experimental)
 - `/tcgplayer connect cookie:<string>` securely stores your TCGplayer cookie (must include `StoreCart_PRODUCTION=CK=`). Paste it from the browser’s cart page.
 - `/tcgplayer status` confirms whether credentials are stored; `/tcgplayer disconnect` removes them.
-- `/tcgplayer cart_add sku:<id> seller_key:<key> price:<amt> [quantity] [is_direct] [channel_id] [country_code]` replays the browser request to add an item to your cart.
+- `/tcgplayer listings product_id:<id> [limit]` lists the top marketplace entries (shows sku/sellerKey/price/quantity) so you can confirm the cart payload.
+- `/tcgplayer cart_add sku:<id> seller_key:<key> price:<amt> …` adds manually, or simply provide `product_id`/`listing_index` to auto-fill the fields from `/tcgplayer listings`.
 - The bot requires your cookie and mimics browser headers. Cookies expire; re-run `/tcgplayer connect` whenever you refresh the browser session.
 - Always obtain TCGplayer’s approval before enabling auto-cart in production.
 
