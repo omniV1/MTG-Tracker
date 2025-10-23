@@ -45,7 +45,7 @@ class TcgplayerListingsService:
         offset: int = 0,
         country_code: str = "US",
         channel_id: int = 0,
-        seller_programs: Optional[List[str]] = None,
+        wpn_only: bool = False,
     ) -> List[ListingInfo]:
         session = self._session
         if session is None:
@@ -72,6 +72,7 @@ class TcgplayerListingsService:
                     "sellerStatus": "Live",
                     "channelId": channel_id,
                     "language": ["English"],
+                    **({"sellerPrograms": "WizardsPlayNetwork"} if wpn_only else {}),
                 },
                 "range": {"quantity": {"gte": 1}},
                 "exclude": {"channelExclusion": 0},
@@ -82,9 +83,6 @@ class TcgplayerListingsService:
             "context": {"shippingCountry": country_code or "US", "cart": {}},
             "aggregations": ["listingType"],
         }
-        if seller_programs:
-            payload["filters"]["term"]["sellerPrograms"] = seller_programs
-
         try:
             async with session.post(url, json=payload, headers=headers) as resp:
                 if resp.status == 403:

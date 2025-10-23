@@ -409,7 +409,7 @@ class MtgDiscordBot(discord.Client):
                 limit=max(1, min(limit or 5, 20)),
                 offset=max(0, offset or 0),
                 country_code=shipping_country or "US",
-                seller_programs=["WizardsPlayNetwork"] if wpn_only else None,
+                wpn_only=bool(wpn_only),
             )
 
             if not listings:
@@ -487,7 +487,7 @@ class MtgDiscordBot(discord.Client):
                     limit=max(1, min((listing_index or 5), 20)),
                     offset=0,
                     country_code=shipping_country or country_code or "US",
-                    seller_programs=["WizardsPlayNetwork"] if wpn_only else None,
+                    wpn_only=bool(wpn_only),
                 )
                 if not listings:
                     await interaction.followup.send(
