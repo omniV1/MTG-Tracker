@@ -6,7 +6,7 @@ import asyncio
 import io
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Iterable, List, Optional
 
 import aiohttp
@@ -80,11 +80,17 @@ class TcgplayerSalesService:
             conditions=conditions,
         )
 
-        cutoff = datetime.utcnow() - timedelta(days=max(days, 1))
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max(days, 1))
         records: List[SaleRecord] = []
         for item in raw_sales:
             order_date = _parse_date(item.get("orderDate"))
-            if order_date is None or order_date < cutoff:
+            if order_date is None:
+                continue
+            if order_date.tzinfo is None:
+                order_date = order_date.replace(tzinfo=timezone.utc)
+            else:
+                order_date = order_date.astimezone(timezone.utc)
+            if order_date < cutoff:
                 continue
             records.append(
                 SaleRecord(
