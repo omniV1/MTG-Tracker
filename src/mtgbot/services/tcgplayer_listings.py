@@ -61,7 +61,7 @@ class TcgplayerListingsService:
         if not include_marketplace:
             params["includeMarketplace"] = "false"
 
-        url = f"{self.BASE_URL}/product/{product_id}/listings/marketplace"
+        url = f"{self.BASE_URL}/product/{product_id}/listings"
         headers = {
             "Origin": "https://www.tcgplayer.com",
             "Referer": "https://www.tcgplayer.com/",
